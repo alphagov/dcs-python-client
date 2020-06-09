@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Disable pylint's long line detection for the Readme.
+# pylint: disable=C0301
 """
 Make a test passport request to the Document Checking Service (DCS)
 
@@ -19,17 +21,21 @@ Options:
 This client is intended as an example of how to write a DCS client. It should not be used against a production DCS.
 See https://dcs-pilot-docs.cloudapps.digital/ for public documentation of the DCS API.
 """
+# pylint: enable=C0301
+
+import base64
+import uuid
+import requests
+
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from datetime import datetime
 from docopt import docopt
-from jwcrypto import jwk, jws, jwe
+from jwcrypto.jwk import JWK
+from jwcrypto.jws import JWS
+from jwcrypto.jwe import JWE
 from jwcrypto.common import json_encode, json_decode
-import base64
-import requests
-import urllib.parse
-import uuid
 
 
 def create_valid_passport_request_payload():
@@ -52,12 +58,16 @@ def create_valid_passport_request_payload():
 
 def sign(message, signing_key, sha1_thumbprint, sha256_thumbprint):
     """Create a signature layer for a message for DCS"""
-    jwstoken = jws.JWS(payload=message)
+    jwstoken = JWS(payload=message)
     jwstoken.add_signature(
         key=signing_key,
         alg=None,
         protected=json_encode(
-            {"alg": "RS256", "x5t": sha1_thumbprint, "x5t#S256": sha256_thumbprint}
+            {
+                "alg": "RS256",
+                "x5t": sha1_thumbprint,
+                "x5t#S256": sha256_thumbprint
+            }
         ),
     )
     return jwstoken.serialize(compact=True)
@@ -66,7 +76,7 @@ def sign(message, signing_key, sha1_thumbprint, sha256_thumbprint):
 def encrypt(message, encryption_certificate):
     """Encrypt a message for DCS"""
     protected_header = {"alg": "RSA-OAEP-256", "enc": "A128CBC-HS256", "typ": "JWE"}
-    jwetoken = jwe.JWE(
+    jwetoken = JWE(
         plaintext=message, recipient=encryption_certificate, protected=protected_header
     )
     return jwetoken.serialize(compact=True)
@@ -74,14 +84,14 @@ def encrypt(message, encryption_certificate):
 
 def decrypt(message, encryption_key):
     """Decrypt a response from DCS"""
-    jwetoken = jwe.JWE()
+    jwetoken = JWE()
     jwetoken.deserialize(raw_jwe=message, key=encryption_key)
     return jwetoken.payload.decode("utf-8")
 
 
 def unwrap_signature(message, signing_certificate):
     """Validate and strip a signature from a response from DCS"""
-    jwstoken = jws.JWS()
+    jwstoken = JWS()
     jwstoken.deserialize(raw_jws=message, key=signing_certificate)
     return jwstoken.payload.decode("utf-8")
 
@@ -92,14 +102,14 @@ def load_pem(path):
 
     Parsing will fail if the file contains anything other than the PEM-formatted key/certificate.
     """
-    with open(path, "rb") as f:
-        return jwk.JWK.from_pem(f.read())
+    with open(path, "rb") as pem_file:
+        return JWK.from_pem(pem_file.read())
 
 
 def generate_thumbprints(path):
     """Generate the thumbprints needed for the `x5t` and `x5t256` headers"""
-    with open(path, "rb") as f:
-        cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+    with open(path, "rb") as certificate_file:
+        cert = x509.load_pem_x509_certificate(certificate_file.read(), default_backend())
 
     sha1_thumbprint = (
         base64.urlsafe_b64encode(
@@ -121,7 +131,8 @@ def generate_thumbprints(path):
 
 
 def wrap_request_payload(unwrapped_payload, arguments):
-    """Wrap the request payload
+    """
+    Wrap the request payload
 
     A DCS request payload must be signed, encrypted, and then signed again.
 
@@ -148,7 +159,8 @@ def wrap_request_payload(unwrapped_payload, arguments):
 
 
 def unwrap_response(body_data, arguments):
-    """Unwrap the response payload
+    """
+    Unwrap the response payload
 
     DCS signed, encrypted, and then signed the plaintext response.
 
@@ -163,20 +175,24 @@ def unwrap_response(body_data, arguments):
 
 
 def main():
+    """This is the main entry point for the application."""
     arguments = docopt(__doc__)
 
     request_payload_unwrapped = create_valid_passport_request_payload()
     print(f"Request: {request_payload_unwrapped}")
     request_payload_wrapped = wrap_request_payload(request_payload_unwrapped, arguments)
 
-    r = requests.post(
+    dcs_request = requests.post(
         arguments["--url"],
         data=request_payload_wrapped,
         headers={"content-type": "application/jose",},
         cert=(arguments["--client-ssl-certificate"], arguments["--client-ssl-key"]),
         verify=arguments["--server-ssl-ca-bundle"],
     )
-    r.raise_for_status()
+    dcs_request.raise_for_status()
 
-    response_payload_unwrapped = unwrap_response(r.content.decode("utf-8"), arguments)
+    response_payload_unwrapped = unwrap_response(dcs_request.content.decode("utf-8"), arguments)
     print(f"\n\nResponse: {response_payload_unwrapped}")
+
+if __name__ == "__main__":
+    main()
