@@ -44,7 +44,7 @@ def create_valid_passport_request_payload():
 
     Uses the details for a test passport that a test DCS instance will accept as valid.
     """
-    return {
+    return { # This creates a JSON structure that the DCS can understand.
         "correlationId": str(uuid.uuid4()),
         "requestId": str(uuid.uuid4()),
         "timestamp": f"{datetime.utcnow().isoformat(timespec='milliseconds')}Z",
@@ -106,28 +106,23 @@ def load_pem(path):
         return JWK.from_pem(pem_file.read())
 
 
+def make_thumbprint(certificate, thumbprint_type):
+    """Create singular thumbprint, with provided certificate and algorithm type"""
+    return (
+        base64.urlsafe_b64encode(
+            certificate.fingerprint(thumbprint_type)
+        )  # The thumbprint is a URL-encoded hash...
+        .decode("utf-8")  # ... as a Python string ...
+        .strip("=") # ... with the padding removed.
+    )
+
 def generate_thumbprints(path):
     """Generate the thumbprints needed for the `x5t` and `x5t256` headers"""
     with open(path, "rb") as certificate_file:
         cert = x509.load_pem_x509_certificate(certificate_file.read(), default_backend())
 
-    sha1_thumbprint = (
-        base64.urlsafe_b64encode(
-            cert.fingerprint(hashes.SHA1())
-        )  # The thumbprint is a URL-encoded hash...
-        .decode("utf-8")  # ... as a Python string ...
-        .strip("=")  # ... with the padding removed.
-    )
-
-    sha256_thumbprint = (
-        base64.urlsafe_b64encode(
-            cert.fingerprint(hashes.SHA256())
-        )  # The thumbprint is a URL-encoded hash...
-        .decode("utf-8")  # ... as a Python string ...
-        .strip("=")  # ... with the padding removed.
-    )
-
-    return sha1_thumbprint, sha256_thumbprint
+    # Return a tupal, with SHA1 and SHA256 thumbprints.
+    return make_thumbprint(cert, hashes.SHA1()), make_thumbprint(cert, hashes.SHA256())
 
 
 def wrap_request_payload(unwrapped_payload, arguments):
@@ -174,14 +169,36 @@ def unwrap_response(body_data, arguments):
     return json_decode(unwrap_signature(inner_signed, server_signing_certificate))
 
 
+
 def main():
-    """This is the main entry point for the application."""
+    """
+    This is the main entry point for the application.
+
+    The diagram below explains the operations that are carried out in the `wrap_request_payload` method, 
+    the reverse of this operation is carried out by the `unwrap_response` method.
+
+    +-------------+   1    +-------------+   2    +-----------------+   3    +-----------------+
+    | JSON Object | +----> | JSON Object | +----> | +-------------+ | +----> | +-------------+ |
+    +-------------+  JWS   +-------------+  JWE   | | JSON Object | |  JWS   | | JSON Object | |
+                           |   Signed    |        | +-------------+ |        | +-------------+ |
+                           +-------------+        | |   Signed    | |        | |   Signed    | |
+                                                  | +-------------+ |        | +-------------+ |
+                                                  |    Encrypted    |        |    Encrypted    |
+                                                  +-----------------+        +-----------------+
+                                                                             |     Signed      |
+                                                                             +-----------------+
+    """
+
+    # Parse command line arguments.
     arguments = docopt(__doc__)
 
+    # Construct DCS Payload -->
     request_payload_unwrapped = create_valid_passport_request_payload()
     print(f"Request: {request_payload_unwrapped}")
     request_payload_wrapped = wrap_request_payload(request_payload_unwrapped, arguments)
+    # <-- Construct DCS Payload
 
+    # Send POST request to the DCS -->
     dcs_request = requests.post(
         arguments["--url"],
         data=request_payload_wrapped,
@@ -190,7 +207,9 @@ def main():
         verify=arguments["--server-ssl-ca-bundle"],
     )
     dcs_request.raise_for_status()
+    # <-- Send POST request to the DCS
 
+    # Unwrap response from the DCS.
     response_payload_unwrapped = unwrap_response(dcs_request.content.decode("utf-8"), arguments)
     print(f"\n\nResponse: {response_payload_unwrapped}")
 
