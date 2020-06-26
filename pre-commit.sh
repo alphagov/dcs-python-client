@@ -1,3 +1,5 @@
 #! /bin/bash
+set -eou pipefail
 
-pylint ./**/*.py 
+pylint client
+mypy client

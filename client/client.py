@@ -24,6 +24,7 @@ See https://dcs-pilot-docs.cloudapps.digital/ for public documentation of the DC
 # pylint: enable=C0301
 
 from datetime import datetime
+from typing import Any, Dict, Union, List, Tuple
 
 import base64
 import uuid
@@ -32,14 +33,14 @@ import requests
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from docopt import docopt
-from jwcrypto.jwk import JWK
-from jwcrypto.jws import JWS
-from jwcrypto.jwe import JWE
-from jwcrypto.common import json_encode, json_decode
+from docopt import docopt  # type: ignore
+from jwcrypto.jwk import JWK  # type: ignore
+from jwcrypto.jws import JWS  # type: ignore
+from jwcrypto.jwe import JWE  # type: ignore
+from jwcrypto.common import json_encode, json_decode  # type: ignore
 
 
-def create_valid_passport_request_payload():
+def create_valid_passport_request_payload() -> Dict[str, Union[str, List[str]]]:
     """
     Create a test passport request message payload
 
@@ -57,7 +58,7 @@ def create_valid_passport_request_payload():
     }
 
 
-def sign(message, signing_key, sha1_thumbprint, sha256_thumbprint):
+def sign(message: str, signing_key: JWK, sha1_thumbprint: str, sha256_thumbprint: str) -> str:
     """Create a signature layer for a message for DCS"""
     jwstoken = JWS(payload=message)
     jwstoken.add_signature(
@@ -74,7 +75,7 @@ def sign(message, signing_key, sha1_thumbprint, sha256_thumbprint):
     return jwstoken.serialize(compact=True)
 
 
-def encrypt(message, encryption_certificate):
+def encrypt(message: str, encryption_certificate: JWK) -> str:
     """Encrypt a message for DCS"""
     protected_header = {"alg": "RSA-OAEP-256", "enc": "A128CBC-HS256", "typ": "JWE"}
     jwetoken = JWE(
@@ -83,21 +84,21 @@ def encrypt(message, encryption_certificate):
     return jwetoken.serialize(compact=True)
 
 
-def decrypt(message, encryption_key):
+def decrypt(message: str, encryption_key: JWK) -> str:
     """Decrypt a response from DCS"""
     jwetoken = JWE()
     jwetoken.deserialize(raw_jwe=message, key=encryption_key)
     return jwetoken.payload.decode("utf-8")
 
 
-def unwrap_signature(message, signing_certificate):
+def unwrap_signature(message: str, signing_certificate: JWK) -> str:
     """Validate and strip a signature from a response from DCS"""
     jwstoken = JWS()
     jwstoken.deserialize(raw_jws=message, key=signing_certificate)
     return jwstoken.payload.decode("utf-8")
 
 
-def load_pem(path):
+def load_pem(path: str) -> JWK:
     """
     Load a PEM-formatted key or certificate
 
@@ -107,7 +108,7 @@ def load_pem(path):
         return JWK.from_pem(pem_file.read())
 
 
-def make_thumbprint(certificate, thumbprint_type):
+def make_thumbprint(certificate: x509.Certificate, thumbprint_type: hashes.HashAlgorithm) -> str:
     """Create singular thumbprint, with provided certificate and algorithm type"""
     return (
         base64.urlsafe_b64encode(
@@ -117,7 +118,7 @@ def make_thumbprint(certificate, thumbprint_type):
         .strip("=") # ... with the padding removed.
     )
 
-def generate_thumbprints(path):
+def generate_thumbprints(path: str) -> Tuple[str, str]:
     """Generate the thumbprints needed for the `x5t` and `x5t256` headers"""
     with open(path, "rb") as certificate_file:
         cert = x509.load_pem_x509_certificate(certificate_file.read(), default_backend())
@@ -126,7 +127,7 @@ def generate_thumbprints(path):
     return make_thumbprint(cert, hashes.SHA1()), make_thumbprint(cert, hashes.SHA256())
 
 
-def wrap_request_payload(unwrapped_payload, arguments):
+def wrap_request_payload(unwrapped_payload: Dict[str, Any], arguments: Dict[str, str]) -> str:
     """
     Wrap the request payload
 
@@ -154,7 +155,7 @@ def wrap_request_payload(unwrapped_payload, arguments):
     )
 
 
-def unwrap_response(body_data, arguments):
+def unwrap_response(body_data: str, arguments: Dict[str, str]) -> str:
     """
     Unwrap the response payload
 
@@ -171,7 +172,7 @@ def unwrap_response(body_data, arguments):
 
 
 
-def main():
+def main() -> None:
     """
     This is the main entry point for the application.
 
