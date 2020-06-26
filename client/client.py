@@ -23,6 +23,8 @@ See https://dcs-pilot-docs.cloudapps.digital/ for public documentation of the DC
 """
 # pylint: enable=C0301
 
+from datetime import datetime
+
 import base64
 import uuid
 import requests
@@ -30,7 +32,6 @@ import requests
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from datetime import datetime
 from docopt import docopt
 from jwcrypto.jwk import JWK
 from jwcrypto.jws import JWS
@@ -174,8 +175,8 @@ def main():
     """
     This is the main entry point for the application.
 
-    The diagram below explains the operations that are carried out in the `wrap_request_payload` method, 
-    the reverse of this operation is carried out by the `unwrap_response` method.
+    The diagram below explains the operations that are carried out in the `wrap_request_payload`
+    method. The reverse of this operation is carried out by the `unwrap_response` method.
 
     +-------------+   1    +-------------+   2    +-----------------+   3    +-----------------+
     | JSON Object | +----> | JSON Object | +----> | +-------------+ | +----> | +-------------+ |
