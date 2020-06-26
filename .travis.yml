@@ -1,0 +1,5 @@
+language: python
+install:
+  - pip install pylint -r requirements.txt
+script:
+  - pylint client
