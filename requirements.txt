@@ -3,7 +3,7 @@ cffi==1.14.0
 chardet==3.0.4
 cryptography==2.9.2
 docopt==0.6.2
-idna==2.9
+idna==3.0
 jwcrypto==0.7
 pycparser==2.20
 requests==2.24.0
